@@ -155,7 +155,6 @@ class Extension {
         origins: [...this.config.permissions.containers],
         permissions: [
           'activeTab',
-          'tabs',
           'webRequest',
           'webRequestBlocking',
           'webRequestFilterResponse',
@@ -570,8 +569,11 @@ class Extension {
       // eslint-disable-next-line no-param-reassign
       user = this.findUserByProfileId(profile.profile.id, users);
     }
+    this.log('createProfileUrl');
+    this.log(user);
     this.log(profile);
     const profileUrl = await this.createProfileUrl(user, profile);
+    this.log(profileUrl);
     if (this.platform === 'firefox' && settings.firefoxContainers) {
       let containers: ContextualIdentity[] = [];
       // query existing containers
