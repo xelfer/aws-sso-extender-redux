@@ -28,6 +28,15 @@
         style="width: 40px; margin-left: .25rem;"
         @click="nextUser()"
       />
+      <PrimeButton
+        v-if="users.length > 1"
+        text
+        class="toolbar-item logout-button"
+        icon="pi pi-sign-out"
+        size="small"
+        style="width: 40px; margin-left: .25rem;"
+        @click="confirmLogout()"
+      />
     </template>
     <template
       v-if="permissions.sso && loaded"
@@ -152,6 +161,7 @@
 <script lang="ts">
 import { waitForElement } from '../utils';
 import demoData from '../demo';
+import { toast } from 'vue3-toastify';
 import {
   AppData,
   CustomData,
@@ -382,6 +392,27 @@ export default {
       const options = this.userOptions;
       const currentUserIdx = options.findIndex((u) => u.userId === this.user.userId);
       this.user = options[currentUserIdx + 1] || options[0];
+    },
+    confirmLogout() {
+      if (confirm(`Are you sure you want to log out ${this.user.custom.displayName || this.user.email}? This will remove all data for this account.`)) {
+        this.logoutUser();
+      }
+    },
+    async logoutUser() {
+      const userIdToRemove = this.user.userId;
+      const userDisplayName = this.user.custom.displayName || this.user.email;
+      
+      try {
+        await this.$ext.removeUser(userIdToRemove, this.settings.enableSync);
+        
+        // Reload data to refresh the UI
+        this.reload();
+        
+        // Show success message
+        toast(`Successfully logged out ${userDisplayName}`, { type: 'success' });
+      } catch (error) {
+        toast(`Failed to log out ${userDisplayName}: ${error instanceof Error ? error.message : 'Unknown error'}`, { type: 'error' });
+      }
     },
     async getProfileHotkeys() {
       this.profileHotkeys = await this.$ext.config.browser.commands.getAll().then((commands) => {

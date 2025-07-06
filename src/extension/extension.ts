@@ -287,7 +287,8 @@ class Extension {
   getDefaultUser(data: ExtensionData): UserData {
     this.log('getDefaultUser');
     if (data.settings.defaultUser === 'lastUserId') {
-      return data.users[0];
+      const lastUser = data.users.find((u) => u.userId === data.settings.lastUserId);
+      return lastUser || data.users[0];
     }
     return data.users.filter((u) => u.userId === data.settings.defaultUser)[0];
   }
@@ -358,6 +359,54 @@ class Extension {
     this.log('resetData');
     await this.config.browser.storage.sync.clear();
     await this.config.browser.storage.local.clear();
+  }
+
+  async removeUser(userId: string, enableSync: boolean): Promise<void> {
+    this.log(`removeUser: ${userId}`);
+    
+    // Load user to get appProfileIds
+    const user = await this.loadUser(userId, enableSync);
+    if (!user) {
+      this.log(`User ${userId} not found`);
+      return;
+    }
+    
+    // Remove user-specific storage keys
+    const storage = enableSync ? this.config.browser.storage.sync : this.config.browser.storage.local;
+    await storage.remove([
+      `${this.config.name}-user-${userId}`,
+      `${this.config.name}-custom-${userId}`
+    ]);
+    
+    // Remove associated app profiles
+    if (user.appProfileIds && user.appProfileIds.length > 0) {
+      await this.config.browser.storage.local.remove(user.appProfileIds);
+    }
+    
+    // Remove IAM logins for user's profiles
+    const iamLogins = await this.loadIamLogins();
+    if (user.appProfileIds) {
+      user.appProfileIds.forEach(profileId => {
+        delete iamLogins[profileId];
+      });
+      await this.saveData(`${this.config.name}-iam-logins`, iamLogins, this.config.browser.storage.local);
+    }
+    
+    // Remove user from users list
+    const usersData = await this.config.browser.storage.sync.get(`${this.config.name}-users`);
+    const users = usersData[`${this.config.name}-users`] ? JSON.parse(usersData[`${this.config.name}-users`]).users : [];
+    const updatedUsers = users.filter((id: string) => id !== userId);
+    await this.saveData(`${this.config.name}-users`, { users: updatedUsers }, this.config.browser.storage.sync);
+    
+    // Update settings if this was the default/last user
+    const settings = await this.loadSettings();
+    if (settings.defaultUser === userId || settings.lastUserId === userId) {
+      settings.lastUserId = updatedUsers[0] || '';
+      if (settings.defaultUser === userId) {
+        settings.defaultUser = 'lastUserId';
+      }
+      await this.saveSettings(settings);
+    }
   }
 
   async saveData(
